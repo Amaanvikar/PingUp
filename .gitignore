@@ -1,4 +1,7 @@
+# Environment — do not commit secrets
+client/.env
 server/.env
-.node_modules
-client.env
+
+# Dependencies
 client/node_modules
+server/node_modules
