@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import { dummyConnectionsData, dummyPostsData, dummyUserData } from '../assets/assets'
 import Loading from '../components/Loading'
 import PostCard from '../components/PostCard'
+import ProfileModal from '../components/ProfileModal'
 import UserProfileInfo from '../components/UserProfileInfo'
 
 const currentUserId = dummyUserData._id
@@ -43,6 +45,11 @@ const Profile = () => {
 
   const isOwnProfile = user?._id === currentUserId
 
+  const handleProfileSave = (updates) => {
+    setUser((prev) => (prev ? { ...prev, ...updates } : prev))
+    toast.success('Profile updated')
+  }
+
   if (!user) {
     return <Loading />
   }
@@ -80,10 +87,13 @@ const Profile = () => {
           </div>
         </div>
 
-        {showEdit && (
-          <div className='rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600 shadow-sm'>
-            Placeholder: add your edit-profile form when <strong>showEdit</strong> is true.
-          </div>
+        {isOwnProfile && (
+          <ProfileModal
+            open={showEdit}
+            onClose={() => setShowEdit(false)}
+            user={user}
+            onSave={handleProfileSave}
+          />
         )}
 
         <div className='flex justify-center'>
