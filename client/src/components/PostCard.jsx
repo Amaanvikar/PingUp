@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { BadgeCheck, Heart, X } from 'lucide-react'
 import moment from 'moment'
+import { useNavigate } from 'react-router-dom'
+
 
 /** Renders plain text with #hashtags wrapped for styling (no raw HTML). */
 function contentWithHashtags(text) {
@@ -37,6 +39,8 @@ const PostModal = ({ post, onClose }) => {
 
   const likes = Array.isArray(post.likes_count) ? post.likes_count.length : 0
 
+  const navigate = useNavigate()
+
   return (
     <div
       className='fixed inset-0 z-[115] flex items-start justify-center overflow-y-auto bg-black/70 p-4 backdrop-blur-sm sm:items-center sm:p-6'
@@ -64,6 +68,7 @@ const PostModal = ({ post, onClose }) => {
               src={user?.profile_picture}
               alt=''
               className='size-12 shrink-0 rounded-full object-cover ring-2 ring-gray-100'
+              onClick={() => navigate(`/profile/${user._id}`)}
             />
             <div className='min-w-0 flex-1'>
               <div className='flex flex-wrap items-center gap-1.5'>
