@@ -53,19 +53,17 @@ const Connections = () => {
             <button
               onClick={() => setActiveTab(tab.label)}
               key={tab.label}
-              className={`mr-2 mb-2 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                activeTab === tab.label
+              className={`mr-2 mb-2 inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition ${activeTab === tab.label
                   ? 'bg-indigo-600 text-white'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+                }`}
             >
               <tab.icon className='w-4 h-4' />
               <span>{tab.label}</span>
 
               <span
-                className={`rounded-full px-2 py-0.5 text-xs ${
-                  activeTab === tab.label ? 'bg-white/20 text-white' : 'bg-white text-slate-600'
-                }`}
+                className={`rounded-full px-2 py-0.5 text-xs ${activeTab === tab.label ? 'bg-white/20 text-white' : 'bg-white text-slate-600'
+                  }`}
               >
                 {tab.data.length}
               </span>
