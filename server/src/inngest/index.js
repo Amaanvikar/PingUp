@@ -1,5 +1,7 @@
 import { Inngest } from "inngest";
 import User from "../models/user.js";
+import Connection from "../models/Connection.js";
+import sendEmail from "../configs/nodemailer.js";
 
 export const inngest = new Inngest({ id: "pingup-app" });
 
@@ -127,4 +129,62 @@ const syncUserDeletion = inngest.createFunction(
     }
 );
 
-export const functions = [syncUserCreation, syncUserUpdate, syncUserDeletion];
+
+const sendNewConnectionRequestReminder = inngest.createFunction(
+    { id: "send-new-connection-request-reminder" },
+    { event: "user/connection-request-sent" },
+    async ({ event, step }) => {
+        const { connectionId } = event.data;
+
+        await step.run('send-connection-reques-mail', async () => {
+            const connection = await Connection.findById(connectionId).populate('from_user_id to_user_id');
+            const subject = `👋🏻 New Connection Request`;
+            const body = `
+            <p>Hello ${connection.to_user_id.full_name},</p>
+            <p>You have a new connection request from ${connection.from_user_id.full_name}.</p>
+            <p>Click <a href="${process.env.FRONTEND_URL}/connections">here</a> to view your connections.</p>
+            <p>Best regards,</p>
+            <p>The PingUp Team</p>
+            `;
+            await sendEmail({
+                to: connection.to_user_id.email,
+                subject,
+                body
+            });
+        });
+
+        const is24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        await step.sleepUnit("wait-for-24-hours", is24Hours);
+        await step.run('send-connection-request-reminder', async () => {
+            const connection = await Connection.findById(connectionId).populate('from_user_id to_user_id');
+
+            if (connection.status !== 'accepted') {
+
+                return { message: 'Connection Already Accepted' };
+            }
+
+            const subject = `👋🏻 New Connection Request`;
+            const body = `
+            <p>Hello ${connection.to_user_id.full_name},</p>
+            <p>You have a new connection request from ${connection.from_user_id.full_name}.</p>
+            <p>Click <a href="${process.env.FRONTEND_URL}/connections">here</a> to view your connections.</p>
+            <p>Best regards,</p>
+            <p>The PingUp Team</p>
+            `;
+            await sendEmail({
+                to: connection.to_user_id.email,
+                subject,
+                body
+            });
+
+            return { message: 'Reminder Sent'};
+        });
+    }
+);
+
+export const functions = [
+    syncUserCreation, 
+    syncUserUpdate, 
+    syncUserDeletion,
+    sendNewConnectionRequestReminder
+];
