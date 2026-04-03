@@ -36,7 +36,7 @@ const Profile = () => {
   const mediaItems = useMemo(() => {
     const items = []
     posts.forEach((post) => {
-      ;(post.image_urls ?? []).forEach((url, i) => {
+      ; (post.image_urls ?? []).forEach((url, i) => {
         items.push({ key: `${post._id}-${i}`, url, post })
       })
     })
@@ -103,11 +103,10 @@ const Profile = () => {
                 key={tab.id}
                 type='button'
                 onClick={() => setActiveTab(tab.id)}
-                className={`rounded-full px-5 py-2 text-sm font-medium transition ${
-                  activeTab === tab.id
+                className={`rounded-full px-5 py-2 text-sm font-medium transition ${activeTab === tab.id
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'text-slate-600 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 {tab.label}
               </button>
