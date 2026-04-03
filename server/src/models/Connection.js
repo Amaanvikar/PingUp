@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 
 const connectionSchema =
-    new mongoose.schema({
+    new mongoose.Schema({
 
         from_user_id: { type: String, required: true, ref: 'User' },
         to_user_id: { type: String, required: true, ref: 'User' },

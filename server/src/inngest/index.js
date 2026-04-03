@@ -2,6 +2,7 @@ import { Inngest } from "inngest";
 import User from "../models/user.js";
 import Connection from "../models/Connection.js";
 import sendEmail from "../configs/nodemailer.js";
+import Story from "../models/Story.js";
 
 export const inngest = new Inngest({ id: "pingup-app" });
 
@@ -131,8 +132,10 @@ const syncUserDeletion = inngest.createFunction(
 
 
 const sendNewConnectionRequestReminder = inngest.createFunction(
-    { id: "send-new-connection-request-reminder" },
-    { event: "user/connection-request-sent" },
+    {
+        id: "send-new-connection-request-reminder",
+        triggers: [{ event: "user/connection-request-sent" }],
+    },
     async ({ event, step }) => {
         const { connectionId } = event.data;
 
@@ -153,14 +156,12 @@ const sendNewConnectionRequestReminder = inngest.createFunction(
             });
         });
 
-        const is24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        await step.sleepUnit("wait-for-24-hours", is24Hours);
+        await step.sleep("wait-for-24-hours", "24h");
         await step.run('send-connection-request-reminder', async () => {
             const connection = await Connection.findById(connectionId).populate('from_user_id to_user_id');
 
-            if (connection.status !== 'accepted') {
-
-                return { message: 'Connection Already Accepted' };
+            if (connection.status === 'accepted') {
+                return { message: 'Connection already accepted' };
             }
 
             const subject = `👋🏻 New Connection Request`;
@@ -177,14 +178,33 @@ const sendNewConnectionRequestReminder = inngest.createFunction(
                 body
             });
 
-            return { message: 'Reminder Sent'};
+            return { message: 'Reminder Sent' };
         });
     }
 );
+
+// delete function for user deletion after 24 hours
+
+
+export const deleteUserStory = inngest.createFunction(
+    {
+        id: "delete-user-story",
+        triggers: [{ event: "app/story.deleted" }],
+    }, async ({ event, step }) => {
+        const { storyId } = event.data;
+        const in24Hours = new Date(Date.now() + 24 * 60 * 60 * 1000)
+        await step.sleepUnit("wait-for-24-hours", in24Hours)
+        await step.run('delete-story', async () => {
+            await Story.findByIdAndDelete(storyId);
+            return { message: "Story deleted" }
+        })
+    });
+
 
 export const functions = [
     syncUserCreation, 
     syncUserUpdate, 
     syncUserDeletion,
-    sendNewConnectionRequestReminder
+    sendNewConnectionRequestReminder,
+    deleteUserStory
 ];
