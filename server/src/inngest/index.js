@@ -1,8 +1,9 @@
-import { Inngest } from "inngest";
+import { cron, Inngest } from "inngest";
 import User from "../models/user.js";
 import Connection from "../models/Connection.js";
 import sendEmail from "../configs/nodemailer.js";
 import Story from "../models/Story.js";
+import Message from "../models/Message.js";
 
 export const inngest = new Inngest({ id: "pingup-app" });
 
@@ -200,11 +201,45 @@ export const deleteUserStory = inngest.createFunction(
         })
     });
 
+const sendUserNotificationOfUnseenMessages = inngest.createFunction(
+    { id: "send-unseen-messages-notification" },
+    { cron: "TZ=Asia/Kolkata 0 0 * * *" },
+    async ({ step }) => {
+        const message = await Message.find({ seen: false }).populate('to_user_id');
+        const unseenCount = {}
+
+        message.map(message => {
+            unseenCount[message.to_user_id._id] = (unseenCount[message.to_user_id._id] || 0) + 1;
+        })
+        for (const userId in unseenCount) {
+            const user = await User.findById(userId);
+
+            const subject = `👋🏻 You have ${unseenCount[userId]} unseen messages`;
+
+            const body = `
+                <p>Hello ${user.full_name},</p>
+                <p>You have ${unseenCount[userId]} unseen messages.</p>
+                <p>Click <a href="${process.env.FRONTEND_URL}/messages">here</a> to view your messages.</p>
+                <p>Best regards,</p>
+                <p>The PingUp Team</p>
+                `;
+            await sendEmail({
+                to: user.email,
+                subject,
+                body
+            })
+        }
+
+        return { message: "Notification sent" }
+    }
+)
+
 
 export const functions = [
-    syncUserCreation, 
-    syncUserUpdate, 
+    syncUserCreation,
+    syncUserUpdate,
     syncUserDeletion,
     sendNewConnectionRequestReminder,
-    deleteUserStory
+    deleteUserStory,
+    sendUserNotificationOfUnseenMessages
 ];

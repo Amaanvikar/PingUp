@@ -1,8 +1,7 @@
-import StoryModal from "../../../client/src/components/StoryModal";
-import getImageKit from "../configs/imagekit";
+import getImageKit from "../configs/imagekit.js";
 import fs from 'fs';
-import Story from "../models/Story";
-import User from "../models/user";
+import Story from "../models/Story.js";
+import User from "../models/user.js";
 
 export const addStory = async (req, res) => {
     try {

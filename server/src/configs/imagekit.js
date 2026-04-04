@@ -1,4 +1,3 @@
-import "dotenv/config";
 import ImageKit from "imagekit";
 
 let _client = null;
