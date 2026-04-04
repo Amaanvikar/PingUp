@@ -202,8 +202,10 @@ export const deleteUserStory = inngest.createFunction(
     });
 
 const sendUserNotificationOfUnseenMessages = inngest.createFunction(
-    { id: "send-unseen-messages-notification" },
-    { cron: "TZ=Asia/Kolkata 0 0 * * *" },
+    {
+        id: "send-unseen-messages-notification",
+        triggers: [{ cron: "TZ=Asia/Kolkata 0 0 * * *" }]
+    },
     async ({ step }) => {
         const message = await Message.find({ seen: false }).populate('to_user_id');
         const unseenCount = {}
