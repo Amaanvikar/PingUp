@@ -3,6 +3,7 @@ import { Image as ImageIcon, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { dummyUserData } from '../assets/assets'
+import { useSelector } from 'react-redux'
 
 /** One picked image: creates a blob URL and revokes it on unmount or when `file` changes. */
 function ImageThumb({ file, onRemove }) {
@@ -33,7 +34,7 @@ function ImageThumb({ file, onRemove }) {
 
 const CreatePost = () => {
   const navigate = useNavigate()
-  const user = dummyUserData
+  const user = useSelector((state) => state.user.user)
 
   const [content, setContent] = useState('')
   const [images, setImages] = useState([])

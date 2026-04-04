@@ -1,6 +1,9 @@
 import React from 'react'
+import { useSelector } from 'react-redux'
 
 const UserCard = ({ user }) => {
+
+  const loggedInUser = useSelector((state) => state.user.user)
   const handleFollow = () => {
     console.log('Followed')
   }

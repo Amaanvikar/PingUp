@@ -123,14 +123,14 @@ export const updateUserData = async (req, res) => {
         }
 
         const profile = req.files.profile && req.files.profile[0]
-        const cover = req.files.cover && req.files.profile[0]
+        const cover = req.files.cover && req.files.cover[0]
 
         if (profile) {
             const imagekit = getImageKit();
             const buffer = fs.readFileSync(profile.path)
             const response = await imagekit.upload({
                 file: buffer,
-                fileName: profile.originalname,
+                fileName: profile.originalname || 'profile.jpg',
             })
             const url = imagekit.url({
                 path: response.filePath,
@@ -149,7 +149,7 @@ export const updateUserData = async (req, res) => {
             const buffer = fs.readFileSync(cover.path)
             const response = await imagekit.upload({
                 file: buffer,
-                fileName: profile.originalname,
+                fileName: cover.originalname || 'cover.jpg',
             })
             const url = imagekit.url({
                 path: response.filePath,
@@ -351,21 +351,24 @@ export const acceptConnectionRequest = async (req, res) => {
 
 export const getUserProfiles = async (req, res) => {
     try {
-        const { profileId } = req.body;
-        const profile = await User.findById(profileId)
+        const { profileId } = req.query
+        if (!profileId) {
+            return res.status(400).json({ success: false, message: 'profileId is required' })
+        }
 
+        const profile = await User.findById(profileId)
         if (!profile) {
             return res.json({ success: false, message: 'Profile not found' })
         }
 
-        const posts = await post.find({ user: profileId })
-            .populate('user')
+        const posts = await post
+            .find({ user_id: profileId })
+            .populate('user_id')
             .sort({ createdAt: -1 })
 
-        return res.json({ success: true, profile, posts })
-
+        res.json({ success: true, profile, posts })
     } catch (e) {
         console.log(e)
-        return res.json({ success: false, message: e.message })
+        res.json({ success: false, message: e.message })
     }
 }

@@ -10,44 +10,27 @@ import Profile from './pages/Profile'
 import CreatePost from './pages/CreatePost'
 import { useUser , useAuth} from '@clerk/clerk-react'
 import Layout from './pages/Layout'
-import toast, { Toaster } from 'react-hot-toast'
+import { Toaster } from 'react-hot-toast'
+import { useDispatch } from 'react-redux'
+import { fetchUser } from './features/user/userSlice'
 
 const App = () => {
 
-  const { user, isLoaded: userLoaded } = useUser()
-  const { getToken, isLoaded: authLoaded, isSignedIn } = useAuth()
+  const dispatch = useDispatch()
+  const { user } = useUser()
+  const { getToken } = useAuth()
 
   useEffect(() => {
-    if (!userLoaded || !authLoaded || !isSignedIn || !user || typeof getToken !== 'function') {
-      return
+    const fetchData = async () => {
+    if ( user ) {
+      const token = await getToken()
+      dispatch(fetchUser(token))
     }
+  }
+  fetchData()
 
-    const apiBase = (import.meta.env.VITE_API_URL || 'http://localhost:3000').replace(
-      /\/$/,
-      ''
-    )
+  }, [user, getToken, dispatch])
 
-    let cancelled = false
-    getToken()
-      .then(async (token) => {
-        if (cancelled || !token) return
-        const res = await fetch(`${apiBase}/api/user/sync`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-        })
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok || !data.success) {
-          console.warn('MongoDB user sync failed:', data.message || res.status)
-        }
-      })
-      .catch((err) => {
-        console.error('Clerk getToken / sync failed:', err)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [userLoaded, authLoaded, isSignedIn, user, getToken])
   return (
     <>
     <Toaster/>

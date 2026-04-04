@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import { useAuth } from '@clerk/clerk-react'
+import { useSelector } from 'react-redux'
 import toast from 'react-hot-toast'
-import { dummyConnectionsData, dummyPostsData, dummyUserData } from '../assets/assets'
+import api from '../api/axios'
 import Loading from '../components/Loading'
 import PostCard from '../components/PostCard'
 import ProfileModal from '../components/ProfileModal'
 import UserProfileInfo from '../components/UserProfileInfo'
-
-const currentUserId = dummyUserData._id
 
 const TABS = [
   { id: 'posts', label: 'Posts' },
@@ -16,42 +16,94 @@ const TABS = [
 ]
 
 const Profile = () => {
-  const { profileId } = useParams()
-  const [user, setUser] = useState(null)
+  const { profileId: profileIdFromUrl } = useParams()
+  const { getToken } = useAuth()
+  const me = useSelector((state) => state.user.user)
+
+  const [profile, setProfile] = useState(null)
   const [posts, setPosts] = useState([])
   const [showEdit, setShowEdit] = useState(false)
   const [activeTab, setActiveTab] = useState('posts')
+  const [loading, setLoading] = useState(true)
+
+  // /profile → you; /profile/:id → that user
+  const id = profileIdFromUrl ?? me?._id
 
   useEffect(() => {
-    const resolved =
-      profileId != null
-        ? dummyConnectionsData.find((u) => u._id === profileId) ?? dummyUserData
-        : dummyUserData
+    if (!id) {
+      setLoading(false)
+      setProfile(null)
+      setPosts([])
+      return
+    }
 
-    setUser(resolved)
-    const userPosts = dummyPostsData.filter((p) => p.user?._id === resolved._id)
-    setPosts(userPosts)
-  }, [profileId])
+    let ignore = false
 
-  const mediaItems = useMemo(() => {
-    const items = []
-    posts.forEach((post) => {
-      ; (post.image_urls ?? []).forEach((url, i) => {
-        items.push({ key: `${post._id}-${i}`, url, post })
-      })
-    })
-    return items
-  }, [posts])
+    ;(async () => {
+      setLoading(true)
+      try {
+        const token = await getToken()
+        const { data } = await api.get('/api/user/profiles', {
+          params: { profileId: id },
+          headers: { Authorization: `Bearer ${token}` },
+        })
 
-  const isOwnProfile = user?._id === currentUserId
+        if (ignore) return
 
-  const handleProfileSave = (updates) => {
-    setUser((prev) => (prev ? { ...prev, ...updates } : prev))
-    toast.success('Profile updated')
+        if (!data.success) {
+          toast.error(data.message ?? 'Could not load profile')
+          setProfile(null)
+          setPosts([])
+          return
+        }
+
+        setProfile(data.profile)
+        // PostCard expects user, image_urls, likes_count — API uses user_id, image_url, like_count
+        setPosts(
+          (data.posts ?? []).map((p) => ({
+            ...p,
+            user: p.user_id ?? p.user,
+            image_urls: p.image_url ?? p.image_urls ?? [],
+            likes_count: Array.isArray(p.like_count) ? p.like_count : [],
+          }))
+        )
+      } catch (e) {
+        if (!ignore) {
+          toast.error(e.response?.data?.message ?? e.message ?? 'Could not load profile')
+          setProfile(null)
+          setPosts([])
+        }
+      } finally {
+        if (!ignore) setLoading(false)
+      }
+    })()
+
+    return () => {
+      ignore = true
+    }
+  }, [id, getToken])
+
+  const mediaItems = posts.flatMap((post) =>
+    (post.image_urls ?? []).map((url, i) => ({
+      key: `${post._id}-${i}`,
+      url,
+    }))
+  )
+
+  const isMine = Boolean(profile && me && profile._id === me._id)
+
+  const handleProfileSave = (updatedUser) => {
+    if (updatedUser) setProfile(updatedUser)
   }
 
-  if (!user) {
-    return <Loading />
+  if (!id || loading) return <Loading />
+
+  if (!profile) {
+    return (
+      <div className='flex h-full items-center justify-center bg-slate-50 px-4'>
+        <p className='text-center text-sm text-slate-600'>Profile could not be loaded.</p>
+      </div>
+    )
   }
 
   return (
@@ -59,8 +111,8 @@ const Profile = () => {
       <div className='mx-auto w-full max-w-3xl space-y-6'>
         <div className='overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm'>
           <div className='relative h-40 bg-slate-200 sm:h-48'>
-            {user.cover_photo ? (
-              <img src={user.cover_photo} alt='' className='h-full w-full object-cover' />
+            {profile.cover_photo ? (
+              <img src={profile.cover_photo} alt='' className='h-full w-full object-cover' />
             ) : (
               <div className='h-full w-full bg-gradient-to-r from-slate-200 to-slate-100' />
             )}
@@ -70,16 +122,16 @@ const Profile = () => {
             <div className='flex flex-col gap-5 sm:flex-row sm:items-end sm:gap-8'>
               <div className='relative z-10 shrink-0 -mt-12 sm:-mt-16'>
                 <img
-                  src={user.profile_picture}
+                  src={profile.profile_picture}
                   alt=''
                   className='h-24 w-24 rounded-full border-4 border-white object-cover shadow-md ring-1 ring-slate-200/80 sm:h-32 sm:w-32'
                 />
               </div>
               <div className='min-w-0 flex-1 sm:pb-1'>
                 <UserProfileInfo
-                  user={user}
+                  user={profile}
                   postsCount={posts.length}
-                  isOwnProfile={isOwnProfile}
+                  isOwnProfile={isMine}
                   setShowEdit={setShowEdit}
                 />
               </div>
@@ -87,11 +139,11 @@ const Profile = () => {
           </div>
         </div>
 
-        {isOwnProfile && (
+        {isMine && (
           <ProfileModal
             open={showEdit}
             onClose={() => setShowEdit(false)}
-            user={user}
+            user={profile}
             onSave={handleProfileSave}
           />
         )}
