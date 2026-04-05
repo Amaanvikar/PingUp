@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react'
+import { useAuth } from '@clerk/clerk-react'
 import { BadgeCheck, Heart, X } from 'lucide-react'
 import moment from 'moment'
 import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import api from '../api/axios'
 
-
-/** Renders plain text with #hashtags wrapped for styling (no raw HTML). */
 function contentWithHashtags(text) {
   if (text == null || text === '') return null
   const parts = text.split(/(#\w+)/g)
@@ -19,8 +20,14 @@ function contentWithHashtags(text) {
   )
 }
 
-const PostModal = ({ post, onClose }) => {
-  const user = post?.user
+/** API uses `like_count`; UI often uses `likes_count` after mapping. */
+function likeIdsFromPost(post) {
+  const raw = post?.likes_count ?? post?.like_count ?? []
+  return Array.isArray(raw) ? [...raw] : []
+}
+
+const PostModal = ({ post, likeCount, onClose }) => {
+  const navigate = useNavigate()
 
   useEffect(() => {
     const onKey = (e) => {
@@ -37,9 +44,7 @@ const PostModal = ({ post, onClose }) => {
 
   if (!post) return null
 
-  const likes = Array.isArray(post.likes_count) ? post.likes_count.length : 0
-
-  const navigate = useNavigate()
+  const user = post.user
 
   return (
     <div
@@ -67,8 +72,8 @@ const PostModal = ({ post, onClose }) => {
             <img
               src={user?.profile_picture}
               alt=''
-              className='size-12 shrink-0 rounded-full object-cover ring-2 ring-gray-100'
-              onClick={() => navigate(`/profile/${user._id}`)}
+              className='size-12 shrink-0 cursor-pointer rounded-full object-cover ring-2 ring-gray-100'
+              onClick={() => user?._id && navigate(`/profile/${user._id}`)}
             />
             <div className='min-w-0 flex-1'>
               <div className='flex flex-wrap items-center gap-1.5'>
@@ -86,7 +91,7 @@ const PostModal = ({ post, onClose }) => {
 
         <div className='max-h-[min(70vh,720px)] overflow-y-auto'>
           {post.content ? (
-            <p className='whitespace-pre-wrap px-4 pb-4 pt-3 text-gray-800 leading-relaxed'>
+            <p className='leading-relaxed whitespace-pre-wrap px-4 pb-4 pt-3 text-gray-800'>
               {contentWithHashtags(post.content)}
             </p>
           ) : null}
@@ -107,7 +112,7 @@ const PostModal = ({ post, onClose }) => {
           <div className='flex items-center gap-2 border-t border-gray-100 px-4 py-3 text-gray-600'>
             <Heart className='size-5 text-rose-500' aria-hidden />
             <span className='text-sm'>
-              {likes} {likes === 1 ? 'like' : 'likes'}
+              {likeCount} {likeCount === 1 ? 'like' : 'likes'}
             </span>
             <span className='text-xs text-gray-400'>· {post.post_type?.replace(/_/g, ' ')}</span>
           </div>
@@ -118,11 +123,50 @@ const PostModal = ({ post, onClose }) => {
 }
 
 const PostCard = ({ post }) => {
+  const navigate = useNavigate()
+  const { getToken, userId } = useAuth()
+
   const [modalOpen, setModalOpen] = useState(false)
+  const [likeIds, setLikeIds] = useState(() => likeIdsFromPost(post))
+
+  useEffect(() => {
+    setLikeIds(likeIdsFromPost(post))
+  }, [post])
+
   const handleClose = useCallback(() => setModalOpen(false), [])
+
   const user = post?.user
   const previewImage = post?.image_urls?.[0]
-  const likes = Array.isArray(post?.likes_count) ? post.likes_count.length : 0
+  const likeCount = likeIds.length
+  const liked = Boolean(userId && likeIds.includes(userId))
+
+  const toggleLike = async (e) => {
+    e.stopPropagation()
+    if (!userId) {
+      toast.error('Sign in to like posts.')
+      return
+    }
+    try {
+      const token = await getToken()
+      const { data } = await api.post(
+        '/api/post/like',
+        { postId: post._id },
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+
+      if (!data.success) {
+        toast.error(data.message ?? 'Could not update like')
+        return
+      }
+
+      toast.success(data.message)
+      setLikeIds((prev) =>
+        prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+      )
+    } catch (err) {
+      toast.error(err.response?.data?.message ?? err.message ?? 'Could not update like')
+    }
+  }
 
   return (
     <>
@@ -143,7 +187,11 @@ const PostCard = ({ post }) => {
           <img
             src={user?.profile_picture}
             alt=''
-            className='size-11 shrink-0 rounded-full object-cover ring-2 ring-gray-100'
+            className='size-11 shrink-0 cursor-pointer rounded-full object-cover ring-2 ring-gray-100'
+            onClick={(e) => {
+              e.stopPropagation()
+              if (user?._id) navigate(`/profile/${user._id}`)
+            }}
           />
           <div className='min-w-0 flex-1'>
             <div className='flex flex-wrap items-center gap-1.5'>
@@ -173,15 +221,31 @@ const PostCard = ({ post }) => {
           </div>
         )}
 
-        <div className='flex items-center gap-2 border-t border-gray-100 px-4 py-3 text-gray-600'>
-          <Heart className='size-4 text-rose-500' aria-hidden />
-          <span className='text-sm'>
-            {likes} {likes === 1 ? 'like' : 'likes'}
-          </span>
+        <div
+          className='flex items-center gap-2 border-t border-gray-100 px-4 py-3 text-gray-600'
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          role='presentation'
+        >
+          <button
+            type='button'
+            onClick={toggleLike}
+            className='inline-flex items-center gap-2 rounded-lg p-1 transition hover:bg-rose-50'
+            aria-pressed={liked}
+            aria-label={liked ? 'Unlike' : 'Like'}
+          >
+            <Heart
+              className={`size-4 ${liked ? 'fill-rose-500 text-rose-500' : 'text-rose-500'}`}
+              aria-hidden
+            />
+            <span className='text-sm'>
+              {likeCount} {likeCount === 1 ? 'like' : 'likes'}
+            </span>
+          </button>
         </div>
       </article>
 
-      {modalOpen && <PostModal post={post} onClose={handleClose} />}
+      {modalOpen && <PostModal post={post} likeCount={likeCount} onClose={handleClose} />}
     </>
   )
 }

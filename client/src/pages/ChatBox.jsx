@@ -1,97 +1,116 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import { useAuth } from '@clerk/clerk-react'
 import { ArrowLeft, Send } from 'lucide-react'
+import toast from 'react-hot-toast'
+import { useDispatch, useSelector } from 'react-redux'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { dummyConnectionsData, dummyMessagesData, dummyUserData } from '../assets/assets'
+import api from '../api/axios'
+import { addMessages, fetchMessages, resetMessages } from '../features/messages/messagesSlice'
 
-const meId = dummyUserData._id
-
-/** Sample messages in assets use this id instead of `user_2`; only merge for that peer. */
-const LEGACY_PEER_ID = 'user_2zwZSCMRXQ9GaEEVLgm6akQo96i'
-
-function normalizeUserId(value) {
-  if (value == null) return ''
-  if (typeof value === 'object' && value._id) return value._id
-  return String(value)
-}
-
-function peerIdsForThread(peerId) {
-  const ids = new Set([peerId])
-  if (peerId === 'user_2') ids.add(LEGACY_PEER_ID)
-  return ids
-}
-
-function isInThread(msg, peerId) {
-  const fromId = normalizeUserId(msg.from_user_id)
-  const toId = normalizeUserId(msg.to_user_id)
-  const aliases = peerIdsForThread(peerId)
-
-  const a = fromId === meId && aliases.has(toId)
-  const b = toId === meId && aliases.has(fromId)
-  return a || b
+/** `from_user_id` / `to_user_id` may be a string id or a populated user object. */
+function userIdFromRef(ref) {
+  if (ref == null) return ''
+  if (typeof ref === 'object' && ref._id != null) return String(ref._id)
+  return String(ref)
 }
 
 const ChatBox = () => {
   const { userId } = useParams()
   const navigate = useNavigate()
+  const dispatch = useDispatch()
+  const { getToken } = useAuth()
+
+  const me = useSelector((state) => state.user.user)
+  const connections = useSelector((state) => state.connections.connections)
+  const messages = useSelector((state) => state.messages.messages)
+
+  const [peer, setPeer] = useState(null)
+  const [draft, setDraft] = useState('')
   const endRef = useRef(null)
 
-  const peer = useMemo(
-    () => dummyConnectionsData.find((u) => u._id === userId),
-    [userId]
-  )
+  const myId = me?._id
 
-  const [messages, setMessages] = useState([])
-  const [draft, setDraft] = useState('')
-
+  // Who you are chatting with: from Redux connections, or load profile by URL id.
   useEffect(() => {
-    if (!peer) {
-      setMessages([])
+    const fromList = connections.find((c) => c._id === userId)
+    if (fromList) {
+      setPeer(fromList)
       return
     }
-    const thread = dummyMessagesData
-      .filter((m) => isInThread(m, peer._id))
-      .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt))
-    setMessages(thread)
-  }, [peer])
+
+    let cancelled = false
+    ;(async () => {
+      try {
+        const token = await getToken()
+        if (!token || !userId) return
+        const { data } = await api.get('/api/user/profiles', {
+          params: { profileId: userId },
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (!cancelled && data.success) setPeer(data.profile)
+        else if (!cancelled) setPeer(null)
+      } catch {
+        if (!cancelled) setPeer(null)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [userId, connections, getToken])
+
+  // Load messages for this thread; clear when leaving the chat.
+  useEffect(() => {
+    ;(async () => {
+      const token = await getToken()
+      if (!token || !userId) return
+      dispatch(fetchMessages({ token, peerId: userId }))
+    })()
+
+    return () => {
+      dispatch(resetMessages())
+    }
+  }, [userId, dispatch, getToken])
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const sendMessage = (e) => {
+  const handleSend = async (e) => {
     e.preventDefault()
     const text = draft.trim()
-    if (!text || !peer) return
+    if (!text || !userId) return
 
-    const newMsg = {
-      _id: `local_${Date.now()}`,
-      from_user_id: meId,
-      to_user_id: peer._id,
-      text,
-      message_type: 'text',
-      media_url: '',
-      seen: false,
-      createdAt: new Date().toISOString(),
+    try {
+      const token = await getToken()
+      if (!token) {
+        toast.error('Sign in required')
+        return
+      }
+
+      const formData = new FormData()
+      formData.append('toUserId', userId)
+      formData.append('text', text)
+
+      const { data } = await api.post('/api/message/send', formData, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      if (data.success && data.message) {
+        setDraft('')
+        dispatch(addMessages([data.message]))
+      } else {
+        toast.error(data?.message ?? 'Could not send')
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.message ?? err.message ?? 'Could not send')
     }
-    setMessages((prev) => [...prev, newMsg])
-    setDraft('')
-  }
-
-  if (!userId) {
-    return (
-      <div className='p-6 text-center text-sm text-slate-600'>
-        Missing chat user.{' '}
-        <Link to='/messages' className='font-medium text-indigo-600 hover:underline'>
-          Back to messages
-        </Link>
-      </div>
-    )
   }
 
   if (!peer) {
     return (
       <div className='flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-6 text-center'>
-        <p className='text-sm text-slate-600'>We couldn&apos;t find that user.</p>
+        <p className='text-sm text-slate-600'>Loading chat… or user not found.</p>
         <Link
           to='/messages'
           className='rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700'
@@ -114,7 +133,7 @@ const ChatBox = () => {
           <ArrowLeft className='h-5 w-5' />
         </button>
         <img
-          src={peer.profile_picture}
+          src={peer.profile_picture || ''}
           alt=''
           className='h-10 w-10 rounded-full object-cover ring-2 ring-slate-100'
         />
@@ -136,8 +155,8 @@ const ChatBox = () => {
             <p className='text-center text-sm text-slate-500'>No messages yet. Say hello.</p>
           )}
           {messages.map((msg) => {
-            const fromId = normalizeUserId(msg.from_user_id)
-            const mine = fromId === meId
+            const fromId = userIdFromRef(msg.from_user_id)
+            const mine = myId != null && fromId === String(myId)
             const time = new Date(msg.createdAt).toLocaleTimeString(undefined, {
               hour: 'numeric',
               minute: '2-digit',
@@ -147,7 +166,9 @@ const ChatBox = () => {
               <div key={msg._id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
                 <div
                   className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm shadow-sm ${
-                    mine ? 'rounded-br-md bg-indigo-600 text-white' : 'rounded-bl-md border border-slate-200 bg-white text-slate-800'
+                    mine
+                      ? 'rounded-br-md bg-indigo-600 text-white'
+                      : 'rounded-bl-md border border-slate-200 bg-white text-slate-800'
                   }`}
                 >
                   {msg.message_type === 'image' && msg.media_url ? (
@@ -172,10 +193,7 @@ const ChatBox = () => {
         </div>
       </div>
 
-      <form
-        onSubmit={sendMessage}
-        className='shrink-0 border-t border-slate-200 bg-white p-3'
-      >
+      <form onSubmit={handleSend} className='shrink-0 border-t border-slate-200 bg-white p-3'>
         <div className='mx-auto flex max-w-2xl gap-2'>
           <input
             type='text'

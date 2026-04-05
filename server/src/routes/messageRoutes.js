@@ -3,10 +3,11 @@ import { sendMessage, sseController ,getChatMessages} from '../controller/messag
 import { protect } from '../middleware/auth.js';
 import { upload } from '../configs/multer.js';
 
-const messageRouter = express.Router();
+const messageRouter = express.Router()
 
-messageRouter.get('/:userId', sseController);
-messageRouter.post('/send',upload.single('image') ,protect, sendMessage);
-messageRouter.get('/get', protect, getChatMessages);
+// Static paths before `/:userId` so `/get` is not captured as userId "get"
+messageRouter.get('/get', protect, getChatMessages)
+messageRouter.post('/send', upload.single('image'), protect, sendMessage)
+messageRouter.get('/:userId', sseController)
 
 export default messageRouter;

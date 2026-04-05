@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react'
 import { Image as ImageIcon, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import toast from 'react-hot-toast'
-import { dummyUserData } from '../assets/assets'
+import { useAuth } from '@clerk/clerk-react'
 import { useSelector } from 'react-redux'
+import toast from 'react-hot-toast'
+import api from '../api/axios'
+import Loading from '../components/Loading'
 
-/** One picked image: creates a blob URL and revokes it on unmount or when `file` changes. */
 function ImageThumb({ file, onRemove }) {
   const [url, setUrl] = useState(null)
 
@@ -32,8 +33,16 @@ function ImageThumb({ file, onRemove }) {
   )
 }
 
+/** Matches server allowed types: text | image | text_with_image */
+function inferPostType(text, hasImages) {
+  if (hasImages && text) return 'text_with_image'
+  if (hasImages) return 'image'
+  return 'text'
+}
+
 const CreatePost = () => {
   const navigate = useNavigate()
+  const { getToken } = useAuth()
   const user = useSelector((state) => state.user.user)
 
   const [content, setContent] = useState('')
@@ -58,15 +67,39 @@ const CreatePost = () => {
       return
     }
 
+    const token = await getToken()
+    if (!token) {
+      toast.error('You must be signed in to post.')
+      return
+    }
+
+    const formData = new FormData()
+    formData.append('content', content)
+    formData.append('post_type', inferPostType(text, images.length > 0))
+    images.forEach((file) => formData.append('images', file))
+
     setLoading(true)
     try {
-      // Replace with your API call (FormData with text + files).
-      await new Promise((r) => setTimeout(r, 500))
-      toast.success('Post shared (demo)')
+      const { data } = await api.post('/api/post/add', formData, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+
+      if (!data.success) {
+        toast.error(data.message ?? 'Could not create post')
+        return
+      }
+
+      toast.success(data.message ?? 'Post created')
       navigate('/')
+    } catch (e) {
+      toast.error(e.response?.data?.message ?? e.message ?? 'Could not create post')
     } finally {
-      setLoading(false)
+      setLoading(false) 
     }
+  }
+
+  if (!user) {
+    return <Loading />
   }
 
   return (

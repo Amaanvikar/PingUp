@@ -5,7 +5,7 @@ import moment from 'moment'
 const StoryViewer = ({ viewStory, setViewStory, stories = [] }) => {
   const index = stories.findIndex((s) => s._id === viewStory?._id)
   const story = viewStory
-  const user = story?.user
+  const user = story?.user ?? story?.user_id
 
   const close = () => setViewStory(null)
 

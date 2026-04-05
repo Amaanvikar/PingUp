@@ -2,8 +2,11 @@ import React from 'react'
 import { MessageSquare, Search, User, UserPlus } from 'lucide-react'
 import { dummyConnectionsData } from '../assets/assets'
 import { useNavigate } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 
 const Messages = () => {
+
+  const { connections } = useSelector((state) => state.connections)
 
   const navigate = useNavigate()
 
@@ -29,7 +32,7 @@ const Messages = () => {
 
         {/* Connected users */}
         <div className='space-y-3'>
-          {dummyConnectionsData.map((user) => (
+          {connections.map((user) => (
             <div
               key={user._id}
               className='w-full rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md'
